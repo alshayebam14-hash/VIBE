@@ -72,7 +72,7 @@
 
         textarea {
             width: 100%;
-            height: 180px;
+            height: 150px;
             background: #151622;
             border: 1px solid var(--border);
             border-radius: 8px;
@@ -192,13 +192,20 @@
         <p style="color: var(--subtext);">نسخ، معالجة، وإرسال إحصائيات التكليجات إلى الديسكورد</p>
     </header>
 
+    <!-- ⚙️ خانة إعدادات ربط الأسماء الواجهة -->
+    <div class="card">
+        <h2>⚙️ إعدادات ربط الأسماء (الاسم الظاهر = اليوزر نيم)</h2>
+        <p style="color: var(--subtext); margin-bottom: 10px; font-size: 0.85rem;">أضف أو عدّل الأسماء هنا بصيغة: <code>الاسم الظاهر = @اليوزر</code> (سطر لكل شخص)</p>
+        <textarea id="mappingText" style="height: 120px;" placeholder="اكتب هنا التحويلات..."></textarea>
+    </div>
+
     <!-- إدخال النص -->
     <div class="card">
         <h2>📋 ألصق نصوص التكليجات هنا</h2>
-        <textarea id="rawText" placeholder="ألصق محادثة الديسكورد أو التكليجات هنا..."></textarea>
+        <textarea id="rawText" placeholder="ألصق محادثة الديسكورد المنسوخة هنا..."></textarea>
         <div class="btn-group">
             <button onclick="processText()">⚡ تحليل واستخراج</button>
-            <button class="danger" onclick="clearAll()">🗑️ مسح الكل</button>
+            <button class="danger" onclick="clearAll()">🗑️ مسح النص</button>
         </div>
     </div>
 
@@ -210,7 +217,7 @@
         </div>
     </div>
 
-    <!-- قائمة التكليجات المكتشفة -->
+    <!-- سجل التكليجات -->
     <div class="card">
         <h2>📜 السجل التفصيلي للتكليجات</h2>
         <div id="logsList">
@@ -227,10 +234,89 @@
     const WEBHOOK_URL = "https://discord.com/api/webhooks/1555155559659999232/80otR3BTd_brQxnYws7OjT6giQZQxIe3bdm4co7X-qpoKG9zRFQGYJfC08IM-n8O-3F0";
     let parsedData = [];
 
+    // تعبئة الخانة تلقائياً بالبيانات المستخرجة من الصور
+    const defaultMappings = `! Abdullah = @54e.
+! Sunrise ♪ = @bsh._
+! Aymn = @ijvc2
+! Nawaf = @.naaf
+s7si. = @s7si.
+3z 不 = @7.5a
+911 = @tk13830
+Abdulelah = @z.mz
+Abdulelah = @nay.77
+Abdullah = @72m
+Abu Hadlan = @ahadlan9
+Abu Majed = @amjads7
+Abu Majed | phone = @bn.majah
+Ahmed . = @a_.70
+Arth = @meclar
+AS = @ahmad14s
+AZIZ = @an728244
+Da = @s30i
+DNDON = @dndon
+F = @f503.
+Faisal = @f.a22
+Honest = @dc.e
+IBRAHIM = @cblex
+ibrahim77 = @ib.saad
+iFaLcOn = @ifalcon.
+' KHALID = @.ikd
+J = @js2y
+Jalal = @jalal_87
+jawad = @.jd911
+Jee = @j2yi
+K = @nl9i
+Lovely = @xiil4
+Luffy = @luffy89
+Majed = @9ec
+Mastermind = @1meesh
+md = @hwwq
+Mjed = @rootmjed
+MJED = @cyberxmjed
+Mohvmmed = @mohvmmed
+MQ = @i.mq
+Mr.lua = @mr.lua
+Nawaf = @xin77n
+Nebula = @767c
+Nerf = @heavnlycurse
+Nerf = @mm7g
+Normal = @0cx
+NWG = @nwg_4
+Pixel = @qd.v
+Rakan = @rakan.oc
+Rakan - ابو زيد = @rokli
+Rayan = @r6n.
+Skywalker = @66cv22
+sMoK = @a.fa9
+SSS = @swerh`;
+
+    document.getElementById('mappingText').value = defaultMappings;
+
+    // دالة بناء خريطة التكليجات من الخانة النصية
+    function getMapFromInput() {
+        const text = document.getElementById('mappingText').value;
+        const lines = text.split('\n');
+        const map = {};
+
+        lines.forEach(line => {
+            if (line.includes('=')) {
+                const parts = line.split('=');
+                if (parts.length >= 2) {
+                    const key = '@' + parts[0].trim().toLowerCase();
+                    let val = parts[1].trim();
+                    if (!val.startsWith('@')) val = '@' + val;
+                    map[key] = val;
+                }
+            }
+        });
+        return map;
+    }
+
     function processText() {
         const text = document.getElementById('rawText').value;
         if (!text.trim()) return;
 
+        const userMap = getMapFromInput();
         parsedData = [];
         const lines = text.split('\n');
 
@@ -238,18 +324,16 @@
             const line = lines[i].trim();
 
             if (line.includes('=')) {
-                // استخراج نمط (كلمة = كلمة) فقط واستبعاد ما قبله وما بعده
                 const match = line.match(/([^\s=]+\s*=\s*[^\s@]+)/);
                 if (match) {
                     let cleanContent = match[1].trim();
 
-                    // البحث عن المنشن المرفق (في نفس السطر أو الأسطر التالية)
                     let mention = "";
                     for (let j = i; j < Math.min(i + 3, lines.length); j++) {
                         const mentionMatch = lines[j].match(/@([^\s@]+)/);
                         if (mentionMatch) {
-                            const rawMention = mentionMatch[1].trim().toLowerCase();
-                            mention = '@' + rawMention.split(' ')[0];
+                            const rawMention = '@' + mentionMatch[1].trim().toLowerCase();
+                            mention = userMap[rawMention] || rawMention;
                             break;
                         }
                     }
