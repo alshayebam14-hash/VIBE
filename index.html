@@ -72,7 +72,7 @@
 
         textarea {
             width: 100%;
-            height: 150px;
+            height: 180px;
             background: #151622;
             border: 1px solid var(--border);
             border-radius: 8px;
@@ -231,28 +231,35 @@
         const text = document.getElementById('rawText').value;
         if (!text.trim()) return;
 
-        const lines = text.split('\n');
         parsedData = [];
 
-        lines.forEach(line => {
-            const trimmed = line.trim();
-            // البحث عن النمط: النص الأصلي = التكليجة @اسم_المنشن
-            if (trimmed.includes('@')) {
-                const mentionMatch = trimmed.match(/@([\w\-]+|[^\s@]+)/);
-                if (mentionMatch) {
-                    const mention = '@' + mentionMatch[1];
-                    // استخراج التكليجة قبل المنشن
-                    let content = trimmed.substring(0, trimmed.indexOf(mention)).trim();
-                    
-                    if (content) {
-                        parsedData.push({
-                            text: content,
-                            mention: mention.toLowerCase()
-                        });
-                    }
-                }
+        // تقسيم النص بناءً على وجود المنشنات @
+        const matches = text.matchAll(/(.*?)(@[\w\-]+)/gs);
+
+        for (const match of matches) {
+            let content = match[1].trim();
+            let mention = match[2].trim().toLowerCase();
+
+            // فلترة السطور لتخطي ترويسات الديسكورد (التواريخ وأسماء المستخدمين)
+            const lines = content.split('\n');
+            const filteredLines = lines.filter(line => {
+                const l = line.trim();
+                return !l.includes('Yesterday at') && 
+                       !l.includes('Today at') && 
+                       !l.includes('AM') && 
+                       !l.includes('PM') && 
+                       !l.startsWith('!');
+            });
+
+            const cleanContent = filteredLines.join(' ').trim();
+
+            if (cleanContent) {
+                parsedData.push({
+                    text: cleanContent,
+                    mention: mention
+                });
             }
-        });
+        }
 
         renderLeaderboard();
         renderLogs();
@@ -264,7 +271,6 @@
             counts[item.mention] = (counts[item.mention] || 0) + 1;
         });
 
-        // ترتيب تنازلي
         const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
         const leaderboardEl = document.getElementById('leaderboard');
@@ -320,7 +326,6 @@
 
         const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
 
-        // تجهيز رسالة الترتيب لـ Discord
         let description = "**📊 ترتيب الأكثر تكليجاً:**\n\n";
         sorted.forEach(([user, count], index) => {
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔹';
@@ -333,7 +338,7 @@
             embeds: [{
                 title: "🏆 جرد التكليجات النهائي",
                 description: description,
-                color: 5793266, // Discord Blurple
+                color: 5793266,
                 timestamp: new Date().toISOString()
             }]
         };
