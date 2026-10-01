@@ -192,7 +192,7 @@
         <p style="color: var(--subtext);">نسخ، معالجة، وإرسال إحصائيات التكليجات إلى الديسكورد</p>
     </header>
 
-    <!-- ⚙️ خانة إعدادات ربط الأسماء الواجهة -->
+    <!-- ⚙️ خانة إعدادات ربط الأسماء -->
     <div class="card">
         <h2>⚙️ إعدادات ربط الأسماء (الاسم الظاهر = اليوزر نيم)</h2>
         <p style="color: var(--subtext); margin-bottom: 10px; font-size: 0.85rem;">أضف أو عدّل الأسماء هنا بصيغة: <code>الاسم الظاهر = @اليوزر</code> (سطر لكل شخص)</p>
@@ -234,7 +234,6 @@
     const WEBHOOK_URL = "https://discord.com/api/webhooks/1555155559659999232/80otR3BTd_brQxnYws7OjT6giQZQxIe3bdm4co7X-qpoKG9zRFQGYJfC08IM-n8O-3F0";
     let parsedData = [];
 
-    // تعبئة الخانة تلقائياً بالبيانات المستخرجة من الصور
     const defaultMappings = `! Abdullah = @54e.
 ! Sunrise ♪ = @bsh._
 ! Aymn = @ijvc2
@@ -292,31 +291,35 @@ SSS = @swerh`;
 
     document.getElementById('mappingText').value = defaultMappings;
 
-    // دالة بناء خريطة التكليجات من الخانة النصية
     function getMapFromInput() {
         const text = document.getElementById('mappingText').value;
         const lines = text.split('\n');
-        const map = {};
+        const mapList = [];
 
         lines.forEach(line => {
             if (line.includes('=')) {
                 const parts = line.split('=');
                 if (parts.length >= 2) {
-                    const key = '@' + parts[0].trim().toLowerCase();
+                    const rawName = parts[0].trim().toLowerCase().replace(/^@/, '');
                     let val = parts[1].trim();
                     if (!val.startsWith('@')) val = '@' + val;
-                    map[key] = val;
+                    if (rawName) {
+                        mapList.push({ name: rawName, username: val });
+                    }
                 }
             }
         });
-        return map;
+
+        // ترتيب الأسماء من الأطول إلى الأقصر لمنع تداخل الأسماء الجزئية (مثلاً Abu Majed قبل Abu)
+        mapList.sort((a, b) => b.name.length - a.name.length);
+        return mapList;
     }
 
     function processText() {
         const text = document.getElementById('rawText').value;
         if (!text.trim()) return;
 
-        const userMap = getMapFromInput();
+        const mapList = getMapFromInput();
         parsedData = [];
         const lines = text.split('\n');
 
@@ -330,11 +333,24 @@ SSS = @swerh`;
 
                     let mention = "";
                     for (let j = i; j < Math.min(i + 3, lines.length); j++) {
-                        const mentionMatch = lines[j].match(/@([^\s@]+)/);
-                        if (mentionMatch) {
-                            const rawMention = '@' + mentionMatch[1].trim().toLowerCase();
-                            mention = userMap[rawMention] || rawMention;
-                            break;
+                        const targetLine = lines[j].toLowerCase();
+                        if (targetLine.includes('@')) {
+                            // البحث عن أي اسم من خريطة التحويل داخل السطر المنسوخ
+                            for (const item of mapList) {
+                                if (targetLine.includes(item.name)) {
+                                    mention = item.username;
+                                    break;
+                                }
+                            }
+
+                            // إذا لم يجد الاسم المباشر، جلب اليوزر المكتوب بعد @ مباشرة
+                            if (!mention) {
+                                const mentionMatch = lines[j].match(/@([^\s@]+)/);
+                                if (mentionMatch) {
+                                    mention = '@' + mentionMatch[1].trim().toLowerCase();
+                                }
+                            }
+                            if (mention) break;
                         }
                     }
 
