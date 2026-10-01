@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام جرد التكليجات</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #12131C;
+            --card-bg: #1E1F2E;
+            --accent: #5865F2;
+            --accent-hover: #4752C4;
+            --text: #FFFFFF;
+            --subtext: #A3A6AA;
+            --border: #2D2F45;
+            --danger: #ED4245;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Tajawal', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text);
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+            background: var(--card-bg);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        header h1 {
+            color: var(--accent);
+            font-size: 2rem;
+            margin-bottom: 5px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        h2 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            background: #151622;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 12px;
+            font-size: 0.95rem;
+            resize: vertical;
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: var(--accent);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+        }
+
+        button.danger {
+            background: var(--danger);
+        }
+
+        button.danger:hover {
+            background: #c03537;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-card {
+            background: #151622;
+            padding: 15px;
+            border-radius: 8px;
+            border-right: 4px solid var(--accent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-card .rank {
+            font-weight: 900;
+            color: var(--subtext);
+            font-size: 1.2rem;
+        }
+
+        .stat-card .user {
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        .stat-card .count {
+            background: var(--accent);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .list-item {
+            background: #151622;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid var(--border);
+        }
+
+        .list-item .text {
+            color: #E1E2E4;
+        }
+
+        .list-item .mention {
+            color: var(--accent);
+            font-weight: bold;
+            background: rgba(88, 101, 242, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .status {
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #43B581;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>📝 نظام جرد التكليجات</h1>
+        <p style="color: var(--subtext);">نسخ، معالجة، وإرسال إحصائيات التكليجات إلى الديسكورد</p>
+    </header>
+
+    <!-- إدخال النص -->
+    <div class="card">
+        <h2>📋 ألصق نصوص التكليجات هنا</h2>
+        <textarea id="rawText" placeholder="ألصق محادثة الديسكورد أو التكليجات هنا..."></textarea>
+        <div class="btn-group">
+            <button onclick="processText()">⚡ تحليل واستخراج</button>
+            <button class="danger" onclick="clearAll()">🗑️ مسح الكل</button>
+        </div>
+    </div>
+
+    <!-- الترتيب -->
+    <div class="card">
+        <h2>🏆 ترتيب الأكثر تكليجاً</h2>
+        <div id="leaderboard" class="stats-grid">
+            <p style="color: var(--subtext);">لا توجد بيانات بعد...</p>
+        </div>
+    </div>
+
+    <!-- قائمة التكليجات المكتشفة -->
+    <div class="card">
+        <h2>📜 السجل التفصيلي للتكليجات</h2>
+        <div id="logsList">
+            <p style="color: var(--subtext);">لا توجد تكليجات مسجلة...</p>
+        </div>
+        <div class="btn-group" style="margin-top: 15px;">
+            <button onclick="sendToDiscord()">🚀 إرسال الترتيب للديسكورد (Webhook)</button>
+        </div>
+        <p id="statusMsg" class="status"></p>
+    </div>
+</div>
+
+<script>
+    const WEBHOOK_URL = "https://discord.com/api/webhooks/1555155559659999232/80otR3BTd_brQxnYws7OjT6giQZQxIe3bdm4co7X-qpoKG9zRFQGYJfC08IM-n8O-3F0";
+    let parsedData = [];
+
+    function processText() {
+        const text = document.getElementById('rawText').value;
+        if (!text.trim()) return;
+
+        const lines = text.split('\n');
+        parsedData = [];
+
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            // البحث عن النمط: النص الأصلي = التكليجة @اسم_المنشن
+            if (trimmed.includes('@')) {
+                const mentionMatch = trimmed.match(/@([\w\-]+|[^\s@]+)/);
+                if (mentionMatch) {
+                    const mention = '@' + mentionMatch[1];
+                    // استخراج التكليجة قبل المنشن
+                    let content = trimmed.substring(0, trimmed.indexOf(mention)).trim();
+                    
+                    if (content) {
+                        parsedData.push({
+                            text: content,
+                            mention: mention.toLowerCase()
+                        });
+                    }
+                }
+            }
+        });
+
+        renderLeaderboard();
+        renderLogs();
+    }
+
+    function renderLeaderboard() {
+        const counts = {};
+        parsedData.forEach(item => {
+            counts[item.mention] = (counts[item.mention] || 0) + 1;
+        });
+
+        // ترتيب تنازلي
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+        const leaderboardEl = document.getElementById('leaderboard');
+        if (sorted.length === 0) {
+            leaderboardEl.innerHTML = '<p style="color: var(--subtext);">لا توجد بيانات...</p>';
+            return;
+        }
+
+        leaderboardEl.innerHTML = sorted.map(([user, count], index) => `
+            <div class="stat-card">
+                <div>
+                    <span class="rank">#${index + 1}</span>
+                    <span class="user">${user}</span>
+                </div>
+                <span class="count">${count} تكليجة</span>
+            </div>
+        `).join('');
+    }
+
+    function renderLogs() {
+        const logsEl = document.getElementById('logsList');
+        if (parsedData.length === 0) {
+            logsEl.innerHTML = '<p style="color: var(--subtext);">لا توجد تكليجات مسجلة...</p>';
+            return;
+        }
+
+        logsEl.innerHTML = parsedData.map(item => `
+            <div class="list-item">
+                <span class="text">${item.text}</span>
+                <span class="mention">${item.mention}</span>
+            </div>
+        `).join('');
+    }
+
+    function clearAll() {
+        document.getElementById('rawText').value = '';
+        parsedData = [];
+        renderLeaderboard();
+        renderLogs();
+        document.getElementById('statusMsg').style.display = 'none';
+    }
+
+    async function sendToDiscord() {
+        if (parsedData.length === 0) {
+            alert('لا توجد بيانات لإرسالها!');
+            return;
+        }
+
+        const counts = {};
+        parsedData.forEach(item => {
+            counts[item.mention] = (counts[item.mention] || 0) + 1;
+        });
+
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+
+        // تجهيز رسالة الترتيب لـ Discord
+        let description = "**📊 ترتيب الأكثر تكليجاً:**\n\n";
+        sorted.forEach(([user, count], index) => {
+            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔹';
+            description += `${medal} **#${index + 1}** ${user} — **${count}** تكليجة\n`;
+        });
+
+        description += `\n**إجمالي التكليجات المحصاة:** ${parsedData.length}`;
+
+        const payload = {
+            embeds: [{
+                title: "🏆 جرد التكليجات النهائي",
+                description: description,
+                color: 5793266, // Discord Blurple
+                timestamp: new Date().toISOString()
+            }]
+        };
+
+        try {
+            const response = await fetch(WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const statusEl = document.getElementById('statusMsg');
+            if (response.ok) {
+                statusEl.innerText = "✅ تم إرسال الترتيب والجرد إلى الديسكورد بنجاح!";
+                statusEl.style.color = "#43B581";
+                statusEl.style.display = "block";
+            } else {
+                throw new Error();
+            }
+        } catch (err) {
+            const statusEl = document.getElementById('statusMsg');
+            statusEl.innerText = "❌ حدث خطأ أثناء الإرسال للـ Webhook.";
+            statusEl.style.color = "#ED4245";
+            statusEl.style.display = "block";
+        }
+    }
+</script>
+
+</body>
+</html>
