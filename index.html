@@ -121,7 +121,7 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
             gap: 15px;
         }
 
@@ -142,8 +142,16 @@
         }
 
         .stat-card .user {
-            font-size: 1.1rem;
+            font-size: 1rem;
             font-weight: bold;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-card .user-handle {
+            font-size: 0.8rem;
+            color: var(--subtext);
+            font-weight: normal;
         }
 
         .stat-card .count {
@@ -291,35 +299,45 @@ SSS = @swerh`;
 
     document.getElementById('mappingText').value = defaultMappings;
 
+    // استخراج بيانات الربط
     function getMapFromInput() {
         const text = document.getElementById('mappingText').value;
         const lines = text.split('\n');
         const mapList = [];
+        const usernameToDisplayName = {};
 
         lines.forEach(line => {
             if (line.includes('=')) {
                 const parts = line.split('=');
                 if (parts.length >= 2) {
-                    const rawName = parts[0].trim().toLowerCase().replace(/^@/, '');
+                    const originalDisplayName = parts[0].trim();
+                    const rawNameKey = originalDisplayName.toLowerCase().replace(/^@/, '');
                     let val = parts[1].trim();
                     if (!val.startsWith('@')) val = '@' + val;
-                    if (rawName) {
-                        mapList.push({ name: rawName, username: val });
+
+                    if (rawNameKey) {
+                        mapList.push({ 
+                            name: rawNameKey, 
+                            username: val,
+                            displayName: originalDisplayName 
+                        });
+                        // حفظ الاسم الأصلي لكل يوزر
+                        usernameToDisplayName[val.toLowerCase()] = originalDisplayName;
                     }
                 }
             }
         });
 
-        // ترتيب الأسماء من الأطول إلى الأقصر لمنع تداخل الأسماء الجزئية (مثلاً Abu Majed قبل Abu)
+        // ترتيب للبحث حسب الأطول أولاً
         mapList.sort((a, b) => b.name.length - a.name.length);
-        return mapList;
+        return { mapList, usernameToDisplayName };
     }
 
     function processText() {
         const text = document.getElementById('rawText').value;
         if (!text.trim()) return;
 
-        const mapList = getMapFromInput();
+        const { mapList, usernameToDisplayName } = getMapFromInput();
         parsedData = [];
         const lines = text.split('\n');
 
@@ -331,33 +349,40 @@ SSS = @swerh`;
                 if (match) {
                     let cleanContent = match[1].trim();
 
-                    let mention = "";
+                    let foundUsername = "";
+                    let foundDisplayName = "";
+
                     for (let j = i; j < Math.min(i + 3, lines.length); j++) {
                         const targetLine = lines[j].toLowerCase();
                         if (targetLine.includes('@')) {
-                            // البحث عن أي اسم من خريطة التحويل داخل السطر المنسوخ
+                            
+                            // 1. البحث عبر خريطة الأسماء
                             for (const item of mapList) {
                                 if (targetLine.includes(item.name)) {
-                                    mention = item.username;
+                                    foundUsername = item.username;
+                                    foundDisplayName = item.displayName;
                                     break;
                                 }
                             }
 
-                            // إذا لم يجد الاسم المباشر، جلب اليوزر المكتوب بعد @ مباشرة
-                            if (!mention) {
+                            // 2. إذا لم تجد الاسم بالخريطة، استخرج اليوزر المباشر
+                            if (!foundUsername) {
                                 const mentionMatch = lines[j].match(/@([^\s@]+)/);
                                 if (mentionMatch) {
-                                    mention = '@' + mentionMatch[1].trim().toLowerCase();
+                                    foundUsername = '@' + mentionMatch[1].trim().toLowerCase();
+                                    foundDisplayName = usernameToDisplayName[foundUsername.toLowerCase()] || foundUsername;
                                 }
                             }
-                            if (mention) break;
+
+                            if (foundUsername) break;
                         }
                     }
 
-                    if (mention) {
+                    if (foundUsername) {
                         parsedData.push({
                             text: cleanContent,
-                            mention: mention
+                            username: foundUsername.toLowerCase(), // المعرف الأساسي للحساب
+                            displayName: foundDisplayName
                         });
                     }
                 }
@@ -370,8 +395,11 @@ SSS = @swerh`;
 
     function renderLeaderboard() {
         const counts = {};
+        const displayNamesMap = {};
+
         parsedData.forEach(item => {
-            counts[item.mention] = (counts[item.mention] || 0) + 1;
+            counts[item.username] = (counts[item.username] || 0) + 1;
+            displayNamesMap[item.username] = item.displayName;
         });
 
         const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -382,15 +410,21 @@ SSS = @swerh`;
             return;
         }
 
-        leaderboardEl.innerHTML = sorted.map(([user, count], index) => `
-            <div class="stat-card">
-                <div>
-                    <span class="rank">#${index + 1}</span>
-                    <span class="user">${user}</span>
+        leaderboardEl.innerHTML = sorted.map(([user, count], index) => {
+            const displayName = displayNamesMap[user] || user;
+            return `
+                <div class="stat-card">
+                    <div>
+                        <span class="rank">#${index + 1}</span>
+                        <span class="user">
+                            ${displayName}
+                            <span class="user-handle">(${user})</span>
+                        </span>
+                    </div>
+                    <span class="count">${count} تكليجة</span>
                 </div>
-                <span class="count">${count} تكليجة</span>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     function renderLogs() {
@@ -403,7 +437,7 @@ SSS = @swerh`;
         logsEl.innerHTML = parsedData.map(item => `
             <div class="list-item">
                 <span class="text">${item.text}</span>
-                <span class="mention">${item.mention}</span>
+                <span class="mention">${item.displayName} (${item.username})</span>
             </div>
         `).join('');
     }
@@ -423,8 +457,11 @@ SSS = @swerh`;
         }
 
         const counts = {};
+        const displayNamesMap = {};
+
         parsedData.forEach(item => {
-            counts[item.mention] = (counts[item.mention] || 0) + 1;
+            counts[item.username] = (counts[item.username] || 0) + 1;
+            displayNamesMap[item.username] = item.displayName;
         });
 
         const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
@@ -432,7 +469,8 @@ SSS = @swerh`;
         let description = "**📊 ترتيب الأكثر تكليجاً:**\n\n";
         sorted.forEach(([user, count], index) => {
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔹';
-            description += `${medal} **#${index + 1}** ${user} — **${count}** تكليجة\n`;
+            const displayName = displayNamesMap[user] || user;
+            description += `${medal} **#${index + 1}** ${displayName} (${user}) — **${count}** تكليجة\n`;
         });
 
         description += `\n**إجمالي التكليجات المحصاة:** ${parsedData.length}`;
