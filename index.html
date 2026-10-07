@@ -121,7 +121,7 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
             gap: 15px;
         }
 
@@ -139,6 +139,7 @@
             font-weight: 900;
             color: var(--subtext);
             font-size: 1.2rem;
+            margin-left: 8px;
         }
 
         .stat-card .user {
@@ -159,6 +160,7 @@
             padding: 4px 10px;
             border-radius: 20px;
             font-size: 0.85rem;
+            white-space: nowrap;
         }
 
         .list-item {
@@ -204,7 +206,7 @@
     <div class="card">
         <h2>⚙️ إعدادات ربط الأسماء (الاسم الظاهر = اليوزر نيم)</h2>
         <p style="color: var(--subtext); margin-bottom: 10px; font-size: 0.85rem;">أضف أو عدّل الأسماء هنا بصيغة: <code>الاسم الظاهر = @اليوزر</code> (سطر لكل شخص)</p>
-        <textarea id="mappingText" style="height: 120px;" placeholder="اكتب هنا التحويلات..."></textarea>
+        <textarea id="mappingText" style="height: 140px;" placeholder="اكتب هنا التحويلات..."></textarea>
     </div>
 
     <!-- إدخال النص -->
@@ -242,6 +244,7 @@
     const WEBHOOK_URL = "https://discord.com/api/webhooks/1555155559659999232/80otR3BTd_brQxnYws7OjT6giQZQxIe3bdm4co7X-qpoKG9zRFQGYJfC08IM-n8O-3F0";
     let parsedData = [];
 
+    // التعيينات الافتراضية وشاملة لجميع الحسابات الظاهرة في الصور 4[cite: 10, 11, 12, 13]
     const defaultMappings = `! Abdullah = @54e.
 ! Sunrise ♪ = @bsh._
 ! Aymn = @ijvc2
@@ -280,6 +283,7 @@ Mastermind = @1meesh
 md = @hwwq
 Mjed = @rootmjed
 MJED = @cyberxmjed
+MOHAMMED = @mq10054
 Mohvmmed = @mohvmmed
 MQ = @i.mq
 Mr.lua = @mr.lua
@@ -289,17 +293,22 @@ Nerf = @heavnlycurse
 Nerf = @mm7g
 Normal = @0cx
 NWG = @nwg_4
+Out of service = @505l.
 Pixel = @qd.v
 Rakan = @rakan.oc
 Rakan - ابو زيد = @rokli
 Rayan = @r6n.
+S u g a r t = @t69r.
 Skywalker = @66cv22
 sMoK = @a.fa9
-SSS = @swerh`;
+SSS = @swerh
+unknown = @.rrox
+Потерянная Аврора = @idontknow77777
+; = @_lvl`;
 
     document.getElementById('mappingText').value = defaultMappings;
 
-    // استخراج بيانات الربط
+    // استخراج بيانات خريطة التحويلات
     function getMapFromInput() {
         const text = document.getElementById('mappingText').value;
         const lines = text.split('\n');
@@ -318,17 +327,16 @@ SSS = @swerh`;
                     if (rawNameKey) {
                         mapList.push({ 
                             name: rawNameKey, 
-                            username: val,
+                            username: val.toLowerCase(),
                             displayName: originalDisplayName 
                         });
-                        // حفظ الاسم الأصلي لكل يوزر
                         usernameToDisplayName[val.toLowerCase()] = originalDisplayName;
                     }
                 }
             }
         });
 
-        // ترتيب للبحث حسب الأطول أولاً
+        // ترتيب المفاتيح للأطول أولاً لمنع المطابقات الجزئية الخاطئة
         mapList.sort((a, b) => b.name.length - a.name.length);
         return { mapList, usernameToDisplayName };
     }
@@ -356,7 +364,7 @@ SSS = @swerh`;
                         const targetLine = lines[j].toLowerCase();
                         if (targetLine.includes('@')) {
                             
-                            // 1. البحث عبر خريطة الأسماء
+                            // 1. المطابقة حسب خريطة التحويلات
                             for (const item of mapList) {
                                 if (targetLine.includes(item.name)) {
                                     foundUsername = item.username;
@@ -365,12 +373,12 @@ SSS = @swerh`;
                                 }
                             }
 
-                            // 2. إذا لم تجد الاسم بالخريطة، استخرج اليوزر المباشر
+                            // 2. إذا لم تتواجد بالخريطة، قراءة اليوزر المباشر
                             if (!foundUsername) {
                                 const mentionMatch = lines[j].match(/@([^\s@]+)/);
                                 if (mentionMatch) {
                                     foundUsername = '@' + mentionMatch[1].trim().toLowerCase();
-                                    foundDisplayName = usernameToDisplayName[foundUsername.toLowerCase()] || foundUsername;
+                                    foundDisplayName = usernameToDisplayName[foundUsername] || foundUsername;
                                 }
                             }
 
@@ -381,7 +389,7 @@ SSS = @swerh`;
                     if (foundUsername) {
                         parsedData.push({
                             text: cleanContent,
-                            username: foundUsername.toLowerCase(), // المعرف الأساسي للحساب
+                            username: foundUsername, // المفتاح الأساسي للحساب
                             displayName: foundDisplayName
                         });
                     }
