@@ -338,10 +338,6 @@ unknown = @.rrox
 
     document.getElementById('mappingText').value = defaultMappings;
 
-    function cleanKey(str) {
-        return str.toLowerCase().replace(/^[!@'\s;\-\.\_]+/g, '').trim();
-    }
-
     function getMapFromInput() {
         const text = document.getElementById('mappingText').value;
         const lines = text.split('\n');
@@ -353,59 +349,62 @@ unknown = @.rrox
                 const parts = line.split('=');
                 if (parts.length >= 2) {
                     const originalDisplayName = parts[0].trim();
-                    const rawNameKey = cleanKey(originalDisplayName);
                     let val = parts[1].trim();
                     if (!val.startsWith('@')) val = '@' + val;
 
-                    if (rawNameKey) {
-                        mapList.push({ 
-                            name: rawNameKey, 
-                            username: val.toLowerCase(),
-                            displayName: originalDisplayName 
-                        });
-                        usernameToDisplayName[val.toLowerCase()] = originalDisplayName;
-                    }
+                    mapList.push({ 
+                        displayName: originalDisplayName, 
+                        username: val.toLowerCase()
+                    });
+                    usernameToDisplayName[val.toLowerCase()] = originalDisplayName;
                 }
             }
         });
 
-        mapList.sort((a, b) => b.name.length - a.name.length);
+        // الترتيب حسب طول اسم العرض تنازلياً لتجنب التداخل
+        mapList.sort((a, b) => b.displayName.length - a.displayName.length);
         return { mapList, usernameToDisplayName };
     }
 
-    function findUserInLine(line, mapList, usernameToDisplayName) {
-        const targetLine = line.toLowerCase();
-        
-        // 1. المطابقة حسب خريطة التحويلات
+    function parseAuthorHeader(headerLine, mapList, usernameToDisplayName) {
+        // استخراج الجزء الخاص بالاسم من بداية السطر وقبل التاريخ/الوقت
+        const headerParts = headerLine.split('—');
+        const namePart = headerParts[0].split(',')[0].trim();
+        if (!namePart) return null;
+
+        // 1. المطابقة الدقيقة مع القائمة
         for (const item of mapList) {
-            const cleanTarget = cleanKey(targetLine);
-            if (cleanTarget.includes(item.name) || targetLine.includes(item.username)) {
+            // تنظيف المقارنة بدون علامات خاصة
+            const cleanNamePart = namePart.replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
+            const cleanItemName = item.displayName.replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
+
+            if (cleanNamePart === cleanItemName) {
                 return { username: item.username, displayName: item.displayName };
             }
         }
 
-        // 2. المطابقة بالمنشن المباشر
-        const mentionMatch = line.match(/@([a-zA-Z0-9_\.\-]+)/);
+        // 2. إذا لم تتطابق دقيقاً، نتحقق من المنشن المباشر إن وجد
+        const mentionMatch = namePart.match(/@([a-zA-Z0-9_\.\-]+)/);
         if (mentionMatch) {
             const username = '@' + mentionMatch[1].trim().toLowerCase();
-            const displayName = usernameToDisplayName[username] || username;
-            return { username, displayName };
+            return { username, displayName: usernameToDisplayName[username] || namePart };
         }
 
-        // 3. مطابقة بالاسم فقط قبل الوقت والتاريخ
-        const authorMatch = line.match(/^([^\n,\[]+)/);
-        if (authorMatch) {
-            const nameOnly = cleanKey(authorMatch[1]);
-            for (const item of mapList) {
-                if (nameOnly.includes(item.name)) {
-                    return { username: item.username, displayName: item.displayName };
-                }
-            }
-            if (authorMatch[1].trim()) {
-                return { username: '@' + nameOnly, displayName: authorMatch[1].trim() };
+        // 3. كخيار أخير: استخدام الاسم كما هو
+        return { username: '@' + namePart.toLowerCase().replace(/\s+/g, ''), displayName: namePart };
+    }
+
+    function findVictimInText(lines, startIndex, mapList, usernameToDisplayName) {
+        // البحث عن المنشن بعد سطر التكليجة
+        for (let j = startIndex; j < Math.min(startIndex + 3, lines.length); j++) {
+            const line = lines[j];
+            const mentionMatch = line.match(/@([a-zA-Z0-9_\.\-]+)/);
+            if (mentionMatch) {
+                const username = '@' + mentionMatch[1].trim().toLowerCase();
+                const displayName = usernameToDisplayName[username] || username;
+                return { username, displayName };
             }
         }
-
         return null;
     }
 
@@ -423,9 +422,9 @@ unknown = @.rrox
             const line = lines[i].trim();
             if (!line) continue;
 
-            // تحديد صاحب الرسالة (تكون عادة متبوعة بالتاريخ والوقت AM/PM)
+            // تحديد صاحب الرسالة بناءً على وجود توقيت ديسكورد (AM/PM أو —)
             if (line.includes('AM') || line.includes('PM') || line.includes('—')) {
-                const authorInfo = findUserInLine(line, mapList, usernameToDisplayName);
+                const authorInfo = parseAuthorHeader(line, mapList, usernameToDisplayName);
                 if (authorInfo) {
                     currentAuthor = authorInfo;
                 }
@@ -433,18 +432,13 @@ unknown = @.rrox
 
             // إذا كان السطر يحوي شرط التكليجة (كلمة = كلمة)
             if (line.includes('=')) {
+                // التأكد من أنها ليست صيغة خريطة أسماء بل سطر تكليجة
                 const match = line.match(/([^\s=]+\s*=\s*[^\s@]+)/);
                 if (match) {
                     let cleanContent = match[1].trim();
 
-                    // استخراج الضحية (من المنشن)
-                    let victimUser = null;
-                    for (let j = i; j < Math.min(i + 3, lines.length); j++) {
-                        if (lines[j].includes('@')) {
-                            victimUser = findUserInLine(lines[j], mapList, usernameToDisplayName);
-                            if (victimUser) break;
-                        }
-                    }
+                    // استخراج الضحية
+                    let victimUser = findVictimInText(lines, i, mapList, usernameToDisplayName);
 
                     // يُسجل التكليجة فقط إذا توفر الضحية والراصد
                     if (victimUser && currentAuthor) {
@@ -552,7 +546,6 @@ unknown = @.rrox
             return;
         }
 
-        // تجميع البيانات
         const victimCounts = {};
         const victimNames = {};
         const recorderCounts = {};
