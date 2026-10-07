@@ -15,6 +15,7 @@
             --subtext: #A3A6AA;
             --border: #2D2F45;
             --danger: #ED4245;
+            --success: #57F287;
         }
 
         * {
@@ -34,7 +35,7 @@
 
         .container {
             width: 100%;
-            max-width: 900px;
+            max-width: 950px;
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -135,6 +136,10 @@
             align-items: center;
         }
 
+        .stat-card.recorder {
+            border-right-color: var(--success);
+        }
+
         .stat-card .rank {
             font-weight: 900;
             color: var(--subtext);
@@ -163,6 +168,10 @@
             white-space: nowrap;
         }
 
+        .stat-card.recorder .count {
+            background: #23a55a;
+        }
+
         .list-item {
             background: #151622;
             padding: 12px;
@@ -178,12 +187,26 @@
             color: #E1E2E4;
         }
 
-        .list-item .mention {
-            color: var(--accent);
-            font-weight: bold;
-            background: rgba(88, 101, 242, 0.1);
+        .list-item .details {
+            display: flex;
+            gap: 8px;
+            font-size: 0.85rem;
+        }
+
+        .list-item .badge {
             padding: 2px 8px;
             border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .badge-victim {
+            background: rgba(88, 101, 242, 0.2);
+            color: var(--accent);
+        }
+
+        .badge-recorder {
+            background: rgba(87, 242, 135, 0.2);
+            color: var(--success);
         }
 
         .status {
@@ -198,15 +221,15 @@
 
 <div class="container">
     <header>
-        <h1>📝 نظام جرد التكليجات</h1>
-        <p style="color: var(--subtext);">نسخ، معالجة، وإرسال إحصائيات التكليجات إلى الديسكورد</p>
+        <h1>📝 نظام جرد التكليجات المتقدم</h1>
+        <p style="color: var(--subtext);">إحصائيات المكلجين + إحصائيات مسجلي التكليجات</p>
     </header>
 
     <!-- ⚙️ خانة إعدادات ربط الأسماء -->
     <div class="card">
         <h2>⚙️ إعدادات ربط الأسماء (الاسم الظاهر = اليوزر نيم)</h2>
-        <p style="color: var(--subtext); margin-bottom: 10px; font-size: 0.85rem;">أضف أو عدّل الأسماء هنا بصيغة: <code>الاسم الظاهر = @اليوزر</code> (سطر لكل شخص)</p>
-        <textarea id="mappingText" style="height: 140px;" placeholder="اكتب هنا التحويلات..."></textarea>
+        <p style="color: var(--subtext); margin-bottom: 10px; font-size: 0.85rem;">أضف أو عدّل الأسماء هنا بصيغة: <code>الاسم الظاهر = @اليوزر</code></p>
+        <textarea id="mappingText" style="height: 120px;"></textarea>
     </div>
 
     <!-- إدخال النص -->
@@ -219,10 +242,18 @@
         </div>
     </div>
 
-    <!-- الترتيب -->
+    <!-- ترتيب الأكثر تكليجاً -->
     <div class="card">
-        <h2>🏆 ترتيب الأكثر تكليجاً</h2>
-        <div id="leaderboard" class="stats-grid">
+        <h2>🤪 ترتيب الأكثر تكليجاً (المُكلّج)</h2>
+        <div id="leaderboardVictims" class="stats-grid">
+            <p style="color: var(--subtext);">لا توجد بيانات بعد...</p>
+        </div>
+    </div>
+
+    <!-- ترتيب الأكثر تسجيلاً -->
+    <div class="card">
+        <h2>📸 ترتيب الأكثر تسجيلاً للتكليجات (الراصد)</h2>
+        <div id="leaderboardRecorders" class="stats-grid">
             <p style="color: var(--subtext);">لا توجد بيانات بعد...</p>
         </div>
     </div>
@@ -234,7 +265,7 @@
             <p style="color: var(--subtext);">لا توجد تكليجات مسجلة...</p>
         </div>
         <div class="btn-group" style="margin-top: 15px;">
-            <button onclick="sendToDiscord()">🚀 إرسال الترتيب للديسكورد (Webhook)</button>
+            <button onclick="sendToDiscord()">🚀 إرسال التقرير الشامل للديسكورد (Webhook)</button>
         </div>
         <p id="statusMsg" class="status"></p>
     </div>
@@ -307,7 +338,6 @@ unknown = @.rrox
 
     document.getElementById('mappingText').value = defaultMappings;
 
-    // تنظيف المفاتيح من الرموز والمسافات الابتدائية
     function cleanKey(str) {
         return str.toLowerCase().replace(/^[!@'\s;\-\.\_]+/g, '').trim();
     }
@@ -339,9 +369,44 @@ unknown = @.rrox
             }
         });
 
-        // ترتيب المفاتيح بالأطول أولاً
         mapList.sort((a, b) => b.name.length - a.name.length);
         return { mapList, usernameToDisplayName };
+    }
+
+    function findUserInLine(line, mapList, usernameToDisplayName) {
+        const targetLine = line.toLowerCase();
+        
+        // 1. المطابقة حسب خريطة التحويلات
+        for (const item of mapList) {
+            const cleanTarget = cleanKey(targetLine);
+            if (cleanTarget.includes(item.name) || targetLine.includes(item.username)) {
+                return { username: item.username, displayName: item.displayName };
+            }
+        }
+
+        // 2. المطابقة بالمنشن المباشر
+        const mentionMatch = line.match(/@([a-zA-Z0-9_\.\-]+)/);
+        if (mentionMatch) {
+            const username = '@' + mentionMatch[1].trim().toLowerCase();
+            const displayName = usernameToDisplayName[username] || username;
+            return { username, displayName };
+        }
+
+        // 3. مطابقة بالاسم فقط قبل الوقت والتاريخ
+        const authorMatch = line.match(/^([^\n,\[]+)/);
+        if (authorMatch) {
+            const nameOnly = cleanKey(authorMatch[1]);
+            for (const item of mapList) {
+                if (nameOnly.includes(item.name)) {
+                    return { username: item.username, displayName: item.displayName };
+                }
+            }
+            if (authorMatch[1].trim()) {
+                return { username: '@' + nameOnly, displayName: authorMatch[1].trim() };
+            }
+        }
+
+        return null;
     }
 
     function processText() {
@@ -352,91 +417,107 @@ unknown = @.rrox
         parsedData = [];
         const lines = text.split('\n');
 
+        let currentAuthor = null;
+
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
+            if (!line) continue;
 
+            // تحديد صاحب الرسالة (تكون عادة متبوعة بالتاريخ والوقت AM/PM)
+            if (line.includes('AM') || line.includes('PM') || line.includes('—')) {
+                const authorInfo = findUserInLine(line, mapList, usernameToDisplayName);
+                if (authorInfo) {
+                    currentAuthor = authorInfo;
+                }
+            }
+
+            // إذا كان السطر يحوي شرط التكليجة (كلمة = كلمة)
             if (line.includes('=')) {
                 const match = line.match(/([^\s=]+\s*=\s*[^\s@]+)/);
                 if (match) {
                     let cleanContent = match[1].trim();
 
-                    let foundUsername = "";
-                    let foundDisplayName = "";
-
+                    // استخراج الضحية (من المنشن)
+                    let victimUser = null;
                     for (let j = i; j < Math.min(i + 3, lines.length); j++) {
-                        const targetLine = lines[j].toLowerCase();
-                        if (targetLine.includes('@')) {
-                            
-                            // البحث المطابق المتقدم
-                            for (const item of mapList) {
-                                const cleanTarget = cleanKey(targetLine);
-                                if (cleanTarget.includes(item.name) || targetLine.includes(item.username)) {
-                                    foundUsername = item.username;
-                                    foundDisplayName = item.displayName;
-                                    break;
-                                }
-                            }
-
-                            // استخراج مباشر في حال عدم وجود مطابقة
-                            if (!foundUsername) {
-                                const mentionMatch = lines[j].match(/@([a-zA-Z0-9_\.\-]+)/);
-                                if (mentionMatch) {
-                                    foundUsername = '@' + mentionMatch[1].trim().toLowerCase();
-                                    foundDisplayName = usernameToDisplayName[foundUsername] || foundUsername;
-                                }
-                            }
-
-                            if (foundUsername) break;
+                        if (lines[j].includes('@')) {
+                            victimUser = findUserInLine(lines[j], mapList, usernameToDisplayName);
+                            if (victimUser) break;
                         }
                     }
 
-                    if (foundUsername && foundUsername.length > 2) {
+                    // يُسجل التكليجة فقط إذا توفر الضحية والراصد
+                    if (victimUser && currentAuthor) {
                         parsedData.push({
                             text: cleanContent,
-                            username: foundUsername,
-                            displayName: foundDisplayName
+                            victim: victimUser,
+                            recorder: currentAuthor
                         });
                     }
                 }
             }
         }
 
-        renderLeaderboard();
+        renderLeaderboards();
         renderLogs();
     }
 
-    function renderLeaderboard() {
-        const counts = {};
-        const displayNamesMap = {};
+    function renderLeaderboards() {
+        const victimCounts = {};
+        const victimNames = {};
+        
+        const recorderCounts = {};
+        const recorderNames = {};
 
         parsedData.forEach(item => {
-            counts[item.username] = (counts[item.username] || 0) + 1;
-            displayNamesMap[item.username] = item.displayName;
+            // تجميع الضحايا
+            victimCounts[item.victim.username] = (victimCounts[item.victim.username] || 0) + 1;
+            victimNames[item.victim.username] = item.victim.displayName;
+
+            // تجميع الراصدين
+            recorderCounts[item.recorder.username] = (recorderCounts[item.recorder.username] || 0) + 1;
+            recorderNames[item.recorder.username] = item.recorder.displayName;
         });
 
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-
-        const leaderboardEl = document.getElementById('leaderboard');
-        if (sorted.length === 0) {
-            leaderboardEl.innerHTML = '<p style="color: var(--subtext);">لا توجد بيانات...</p>';
-            return;
-        }
-
-        leaderboardEl.innerHTML = sorted.map(([user, count], index) => {
-            const displayName = displayNamesMap[user] || user;
-            return `
+        // عرض جدول الضحايا
+        const sortedVictims = Object.entries(victimCounts).sort((a, b) => b[1] - a[1]);
+        const victimEl = document.getElementById('leaderboardVictims');
+        if (sortedVictims.length === 0) {
+            victimEl.innerHTML = '<p style="color: var(--subtext);">لا توجد بيانات...</p>';
+        } else {
+            victimEl.innerHTML = sortedVictims.map(([user, count], index) => `
                 <div class="stat-card">
                     <div>
                         <span class="rank">#${index + 1}</span>
                         <span class="user">
-                            ${displayName}
+                            ${victimNames[user] || user}
                             <span class="user-handle">(${user})</span>
                         </span>
                     </div>
                     <span class="count">${count} تكليجة</span>
                 </div>
-            `;
-        }).join('');
+            `).join('');
+        }
+
+        // عرض جدول الراصدين
+        const sortedRecorders = Object.entries(recorderCounts).sort((a, b) => b[1] - a[1]);
+        const recorderEl = document.getElementById('leaderboardRecorders');
+        if (sortedRecorders.length === 0) {
+            recorderEl.innerHTML = '<p style="color: var(--subtext);">لا توجد بيانات...</p>';
+        } else {
+            recorderEl.innerHTML = sortedRecorders.map(([user, count], index) => `
+                <div class="stat-card recorder">
+                    <div>
+                        <span class="rank">#${index + 1}</span>
+                        <span class="user">
+                            ${recorderNames[user] || user}
+                            <span class="user-handle">(${user})</span>
+                        </span>
+                    </div>
+                    <span class="count">${count} تسجيل</span>
+                </div>
+            `).join('');
+        }
     }
 
     function renderLogs() {
@@ -449,7 +530,10 @@ unknown = @.rrox
         logsEl.innerHTML = parsedData.map(item => `
             <div class="list-item">
                 <span class="text">${item.text}</span>
-                <span class="mention">${item.displayName} (${item.username})</span>
+                <div class="details">
+                    <span class="badge badge-victim">الضحية: ${item.victim.displayName}</span>
+                    <span class="badge badge-recorder">الراصد: ${item.recorder.displayName}</span>
+                </div>
             </div>
         `).join('');
     }
@@ -457,7 +541,7 @@ unknown = @.rrox
     function clearAll() {
         document.getElementById('rawText').value = '';
         parsedData = [];
-        renderLeaderboard();
+        renderLeaderboards();
         renderLogs();
         document.getElementById('statusMsg').style.display = 'none';
     }
@@ -468,29 +552,39 @@ unknown = @.rrox
             return;
         }
 
-        const counts = {};
-        const displayNamesMap = {};
+        // تجميع البيانات
+        const victimCounts = {};
+        const victimNames = {};
+        const recorderCounts = {};
+        const recorderNames = {};
 
         parsedData.forEach(item => {
-            counts[item.username] = (counts[item.username] || 0) + 1;
-            displayNamesMap[item.username] = item.displayName;
+            victimCounts[item.victim.username] = (victimCounts[item.victim.username] || 0) + 1;
+            victimNames[item.victim.username] = item.victim.displayName;
+
+            recorderCounts[item.recorder.username] = (recorderCounts[item.recorder.username] || 0) + 1;
+            recorderNames[item.recorder.username] = item.recorder.displayName;
         });
 
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        const sortedVictims = Object.entries(victimCounts).sort((a, b) => b[1] - a[1]);
+        const sortedRecorders = Object.entries(recorderCounts).sort((a, b) => b[1] - a[1]);
 
-        let description = "**📊 ترتيب الأكثر تكليجاً:**\n\n";
-        sorted.forEach(([user, count], index) => {
+        let descVictims = "**🤪 الأكثر تكليجاً (الضحايا):**\n";
+        sortedVictims.forEach(([user, count], index) => {
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔹';
-            const displayName = displayNamesMap[user] || user;
-            description += `${medal} **#${index + 1}** ${displayName} (${user}) — **${count}** تكليجة\n`;
+            descVictims += `${medal} **#${index + 1}** ${victimNames[user]} (${user}) — **${count}** تكليجة\n`;
         });
 
-        description += `\n**إجمالي التكليجات المحصاة:** ${parsedData.length}`;
+        let descRecorders = "\n**📸 الأكثر تسجيلاً للتكليجات (الراصدين):**\n";
+        sortedRecorders.forEach(([user, count], index) => {
+            const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔹';
+            descRecorders += `${medal} **#${index + 1}** ${recorderNames[user]} (${user}) — **${count}** مسجلة\n`;
+        });
 
         const payload = {
             embeds: [{
-                title: "🏆 جرد التكليجات النهائي",
-                description: description,
+                title: "📊 جرد وإحصائيات التكليجات الشاملة",
+                description: descVictims + descRecorders + `\n**إجمالي التكليجات المرصودة:** ${parsedData.length}`,
                 color: 5793266,
                 timestamp: new Date().toISOString()
             }]
@@ -505,7 +599,7 @@ unknown = @.rrox
 
             const statusEl = document.getElementById('statusMsg');
             if (response.ok) {
-                statusEl.innerText = "✅ تم إرسال الترتيب والجرد إلى الديسكورد بنجاح!";
+                statusEl.innerText = "✅ تم إرسال الجرد الشامل إلى الديسكورد بنجاح!";
                 statusEl.style.color = "#43B581";
                 statusEl.style.display = "block";
             } else {
