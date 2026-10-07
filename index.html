@@ -244,7 +244,6 @@
     const WEBHOOK_URL = "https://discord.com/api/webhooks/1555155559659999232/80otR3BTd_brQxnYws7OjT6giQZQxIe3bdm4co7X-qpoKG9zRFQGYJfC08IM-n8O-3F0";
     let parsedData = [];
 
-    // التعيينات الافتراضية وشاملة لجميع الحسابات الظاهرة في الصور 4[cite: 10, 11, 12, 13]
     const defaultMappings = `! Abdullah = @54e.
 ! Sunrise ♪ = @bsh._
 ! Aymn = @ijvc2
@@ -308,7 +307,11 @@ unknown = @.rrox
 
     document.getElementById('mappingText').value = defaultMappings;
 
-    // استخراج بيانات خريطة التحويلات
+    // تنظيف المفاتيح من الرموز والمسافات الابتدائية
+    function cleanKey(str) {
+        return str.toLowerCase().replace(/^[!@'\s;\-\.\_]+/g, '').trim();
+    }
+
     function getMapFromInput() {
         const text = document.getElementById('mappingText').value;
         const lines = text.split('\n');
@@ -320,7 +323,7 @@ unknown = @.rrox
                 const parts = line.split('=');
                 if (parts.length >= 2) {
                     const originalDisplayName = parts[0].trim();
-                    const rawNameKey = originalDisplayName.toLowerCase().replace(/^@/, '');
+                    const rawNameKey = cleanKey(originalDisplayName);
                     let val = parts[1].trim();
                     if (!val.startsWith('@')) val = '@' + val;
 
@@ -336,7 +339,7 @@ unknown = @.rrox
             }
         });
 
-        // ترتيب المفاتيح للأطول أولاً لمنع المطابقات الجزئية الخاطئة
+        // ترتيب المفاتيح بالأطول أولاً
         mapList.sort((a, b) => b.name.length - a.name.length);
         return { mapList, usernameToDisplayName };
     }
@@ -364,18 +367,19 @@ unknown = @.rrox
                         const targetLine = lines[j].toLowerCase();
                         if (targetLine.includes('@')) {
                             
-                            // 1. المطابقة حسب خريطة التحويلات
+                            // البحث المطابق المتقدم
                             for (const item of mapList) {
-                                if (targetLine.includes(item.name)) {
+                                const cleanTarget = cleanKey(targetLine);
+                                if (cleanTarget.includes(item.name) || targetLine.includes(item.username)) {
                                     foundUsername = item.username;
                                     foundDisplayName = item.displayName;
                                     break;
                                 }
                             }
 
-                            // 2. إذا لم تتواجد بالخريطة، قراءة اليوزر المباشر
+                            // استخراج مباشر في حال عدم وجود مطابقة
                             if (!foundUsername) {
-                                const mentionMatch = lines[j].match(/@([^\s@]+)/);
+                                const mentionMatch = lines[j].match(/@([a-zA-Z0-9_\.\-]+)/);
                                 if (mentionMatch) {
                                     foundUsername = '@' + mentionMatch[1].trim().toLowerCase();
                                     foundDisplayName = usernameToDisplayName[foundUsername] || foundUsername;
@@ -386,10 +390,10 @@ unknown = @.rrox
                         }
                     }
 
-                    if (foundUsername) {
+                    if (foundUsername && foundUsername.length > 2) {
                         parsedData.push({
                             text: cleanContent,
-                            username: foundUsername, // المفتاح الأساسي للحساب
+                            username: foundUsername,
                             displayName: foundDisplayName
                         });
                     }
