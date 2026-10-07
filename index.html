@@ -122,7 +122,7 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
             gap: 15px;
         }
 
@@ -144,7 +144,7 @@
             font-weight: 900;
             color: var(--subtext);
             font-size: 1.2rem;
-            margin-left: 8px;
+            margin-left: 10px;
         }
 
         .stat-card .user {
@@ -152,12 +152,15 @@
             font-weight: bold;
             display: flex;
             flex-direction: column;
+            gap: 2px;
         }
 
         .stat-card .user-handle {
             font-size: 0.8rem;
             color: var(--subtext);
             font-weight: normal;
+            direction: ltr;
+            text-align: right;
         }
 
         .stat-card .count {
@@ -185,6 +188,7 @@
 
         .list-item .text {
             color: #E1E2E4;
+            font-weight: bold;
         }
 
         .list-item .details {
@@ -194,7 +198,7 @@
         }
 
         .list-item .badge {
-            padding: 2px 8px;
+            padding: 4px 8px;
             border-radius: 4px;
             font-weight: bold;
         }
@@ -225,7 +229,7 @@
         <p style="color: var(--subtext);">إحصائيات المكلجين + إحصائيات مسجلي التكليجات</p>
     </header>
 
-    <!-- ⚙️ خانة إعدادات ربط الأسماء -->
+    <!-- ⚙️ إعدادات ربط الأسماء -->
     <div class="card">
         <h2>⚙️ إعدادات ربط الأسماء (الاسم الظاهر = اليوزر نيم)</h2>
         <p style="color: var(--subtext); margin-bottom: 10px; font-size: 0.85rem;">أضف أو عدّل الأسماء هنا بصيغة: <code>الاسم الظاهر = @اليوزر</code></p>
@@ -341,111 +345,86 @@ unknown = @.rrox
     function getMapFromInput() {
         const text = document.getElementById('mappingText').value;
         const lines = text.split('\n');
-        const mapList = [];
-        const usernameToDisplayName = {};
+        const nameToUser = {};
+        const userToName = {};
 
         lines.forEach(line => {
             if (line.includes('=')) {
                 const parts = line.split('=');
                 if (parts.length >= 2) {
-                    const originalDisplayName = parts[0].trim();
-                    let val = parts[1].trim();
-                    if (!val.startsWith('@')) val = '@' + val;
-
-                    mapList.push({ 
-                        displayName: originalDisplayName, 
-                        username: val.toLowerCase()
-                    });
-                    usernameToDisplayName[val.toLowerCase()] = originalDisplayName;
+                    const dispName = parts[0].trim();
+                    let username = parts[1].trim();
+                    if (!username.startsWith('@')) username = '@' + username;
+                    
+                    const cleanDisp = dispName.replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
+                    nameToUser[cleanDisp] = { username: username.toLowerCase(), displayName: dispName };
+                    userToName[username.toLowerCase()] = dispName;
                 }
             }
         });
 
-        // الترتيب حسب طول اسم العرض تنازلياً لتجنب التداخل
-        mapList.sort((a, b) => b.displayName.length - a.displayName.length);
-        return { mapList, usernameToDisplayName };
-    }
-
-    function parseAuthorHeader(headerLine, mapList, usernameToDisplayName) {
-        // استخراج الجزء الخاص بالاسم من بداية السطر وقبل التاريخ/الوقت
-        const headerParts = headerLine.split('—');
-        const namePart = headerParts[0].split(',')[0].trim();
-        if (!namePart) return null;
-
-        // 1. المطابقة الدقيقة مع القائمة
-        for (const item of mapList) {
-            // تنظيف المقارنة بدون علامات خاصة
-            const cleanNamePart = namePart.replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
-            const cleanItemName = item.displayName.replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
-
-            if (cleanNamePart === cleanItemName) {
-                return { username: item.username, displayName: item.displayName };
-            }
-        }
-
-        // 2. إذا لم تتطابق دقيقاً، نتحقق من المنشن المباشر إن وجد
-        const mentionMatch = namePart.match(/@([a-zA-Z0-9_\.\-]+)/);
-        if (mentionMatch) {
-            const username = '@' + mentionMatch[1].trim().toLowerCase();
-            return { username, displayName: usernameToDisplayName[username] || namePart };
-        }
-
-        // 3. كخيار أخير: استخدام الاسم كما هو
-        return { username: '@' + namePart.toLowerCase().replace(/\s+/g, ''), displayName: namePart };
-    }
-
-    function findVictimInText(lines, startIndex, mapList, usernameToDisplayName) {
-        // البحث عن المنشن بعد سطر التكليجة
-        for (let j = startIndex; j < Math.min(startIndex + 3, lines.length); j++) {
-            const line = lines[j];
-            const mentionMatch = line.match(/@([a-zA-Z0-9_\.\-]+)/);
-            if (mentionMatch) {
-                const username = '@' + mentionMatch[1].trim().toLowerCase();
-                const displayName = usernameToDisplayName[username] || username;
-                return { username, displayName };
-            }
-        }
-        return null;
+        return { nameToUser, userToName };
     }
 
     function processText() {
         const text = document.getElementById('rawText').value;
         if (!text.trim()) return;
 
-        const { mapList, usernameToDisplayName } = getMapFromInput();
+        const { nameToUser, userToName } = getMapFromInput();
         parsedData = [];
-        const lines = text.split('\n');
 
-        let currentAuthor = null;
+        // تقسيم النص حسب سطر مرسل الديسكورد (الذي يحتوي على التاريخ والوقت AM/PM أو —)
+        const lines = text.split('\n');
+        let currentRecorder = null;
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
 
-            // تحديد صاحب الرسالة بناءً على وجود توقيت ديسكورد (AM/PM أو —)
-            if (line.includes('AM') || line.includes('PM') || line.includes('—')) {
-                const authorInfo = parseAuthorHeader(line, mapList, usernameToDisplayName);
-                if (authorInfo) {
-                    currentAuthor = authorInfo;
+            // كشف سطر الهيدر الخاص باسم المرسل والتاريخ
+            const isHeader = line.includes('—') || /\d{1,2}\/\d{1,2}\/\d{4}/.test(line) || /\d{1,2}:\d{2}\s*(AM|PM)/i.test(line);
+
+            if (isHeader) {
+                // استخراج الاسم قبل علامة — أو الفاصلة
+                let rawName = line.split('—')[0].split(',')[0].trim();
+                const cleanRaw = rawName.replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
+
+                if (nameToUser[cleanRaw]) {
+                    currentRecorder = nameToUser[cleanRaw];
+                } else {
+                    currentRecorder = {
+                        displayName: rawName,
+                        username: '@' + cleanRaw.replace(/\s+/g, '')
+                    };
                 }
+                continue;
             }
 
-            // إذا كان السطر يحوي شرط التكليجة (كلمة = كلمة)
+            // فحص سطر التكليجة (كلمة = كلمة)
             if (line.includes('=')) {
-                // التأكد من أنها ليست صيغة خريطة أسماء بل سطر تكليجة
                 const match = line.match(/([^\s=]+\s*=\s*[^\s@]+)/);
                 if (match) {
-                    let cleanContent = match[1].trim();
+                    const cleanContent = match[1].trim();
 
-                    // استخراج الضحية
-                    let victimUser = findVictimInText(lines, i, mapList, usernameToDisplayName);
+                    // البحث عن الضحية (المنشن @) في نفس السطر أو الأسطر المباشرة المجاورة
+                    let victimUser = null;
+                    for (let j = i; j < Math.min(i + 3, lines.length); j++) {
+                        const mentionMatch = lines[j].match(/@([a-zA-Z0-9_\.\-]+)/);
+                        if (mentionMatch) {
+                            const uName = '@' + mentionMatch[1].trim().toLowerCase();
+                            victimUser = {
+                                username: uName,
+                                displayName: userToName[uName] || uName
+                            };
+                            break;
+                        }
+                    }
 
-                    // يُسجل التكليجة فقط إذا توفر الضحية والراصد
-                    if (victimUser && currentAuthor) {
+                    if (victimUser && currentRecorder) {
                         parsedData.push({
                             text: cleanContent,
                             victim: victimUser,
-                            recorder: currentAuthor
+                            recorder: currentRecorder
                         });
                     }
                 }
@@ -458,19 +437,21 @@ unknown = @.rrox
 
     function renderLeaderboards() {
         const victimCounts = {};
-        const victimNames = {};
-        
+        const victimDetails = {};
+
         const recorderCounts = {};
-        const recorderNames = {};
+        const recorderDetails = {};
 
         parsedData.forEach(item => {
             // تجميع الضحايا
-            victimCounts[item.victim.username] = (victimCounts[item.victim.username] || 0) + 1;
-            victimNames[item.victim.username] = item.victim.displayName;
+            const vKey = item.victim.username;
+            victimCounts[vKey] = (victimCounts[vKey] || 0) + 1;
+            victimDetails[vKey] = item.victim;
 
             // تجميع الراصدين
-            recorderCounts[item.recorder.username] = (recorderCounts[item.recorder.username] || 0) + 1;
-            recorderNames[item.recorder.username] = item.recorder.displayName;
+            const rKey = item.recorder.username;
+            recorderCounts[rKey] = (recorderCounts[rKey] || 0) + 1;
+            recorderDetails[rKey] = item.recorder;
         });
 
         // عرض جدول الضحايا
@@ -479,14 +460,14 @@ unknown = @.rrox
         if (sortedVictims.length === 0) {
             victimEl.innerHTML = '<p style="color: var(--subtext);">لا توجد بيانات...</p>';
         } else {
-            victimEl.innerHTML = sortedVictims.map(([user, count], index) => `
+            victimEl.innerHTML = sortedVictims.map(([userKey, count], index) => `
                 <div class="stat-card">
-                    <div>
+                    <div style="display: flex; align-items: center;">
                         <span class="rank">#${index + 1}</span>
-                        <span class="user">
-                            ${victimNames[user] || user}
-                            <span class="user-handle">(${user})</span>
-                        </span>
+                        <div class="user">
+                            <span>${victimDetails[userKey].displayName}</span>
+                            <span class="user-handle">(${victimDetails[userKey].username})</span>
+                        </div>
                     </div>
                     <span class="count">${count} تكليجة</span>
                 </div>
@@ -499,14 +480,14 @@ unknown = @.rrox
         if (sortedRecorders.length === 0) {
             recorderEl.innerHTML = '<p style="color: var(--subtext);">لا توجد بيانات...</p>';
         } else {
-            recorderEl.innerHTML = sortedRecorders.map(([user, count], index) => `
+            recorderEl.innerHTML = sortedRecorders.map(([userKey, count], index) => `
                 <div class="stat-card recorder">
-                    <div>
+                    <div style="display: flex; align-items: center;">
                         <span class="rank">#${index + 1}</span>
-                        <span class="user">
-                            ${recorderNames[user] || user}
-                            <span class="user-handle">(${user})</span>
-                        </span>
+                        <div class="user">
+                            <span>${recorderDetails[userKey].displayName}</span>
+                            <span class="user-handle">(${recorderDetails[userKey].username})</span>
+                        </div>
                     </div>
                     <span class="count">${count} تسجيل</span>
                 </div>
@@ -547,31 +528,33 @@ unknown = @.rrox
         }
 
         const victimCounts = {};
-        const victimNames = {};
+        const victimDetails = {};
         const recorderCounts = {};
-        const recorderNames = {};
+        const recorderDetails = {};
 
         parsedData.forEach(item => {
-            victimCounts[item.victim.username] = (victimCounts[item.victim.username] || 0) + 1;
-            victimNames[item.victim.username] = item.victim.displayName;
+            const vKey = item.victim.username;
+            victimCounts[vKey] = (victimCounts[vKey] || 0) + 1;
+            victimDetails[vKey] = item.victim;
 
-            recorderCounts[item.recorder.username] = (recorderCounts[item.recorder.username] || 0) + 1;
-            recorderNames[item.recorder.username] = item.recorder.displayName;
+            const rKey = item.recorder.username;
+            recorderCounts[rKey] = (recorderCounts[rKey] || 0) + 1;
+            recorderDetails[rKey] = item.recorder;
         });
 
         const sortedVictims = Object.entries(victimCounts).sort((a, b) => b[1] - a[1]);
         const sortedRecorders = Object.entries(recorderCounts).sort((a, b) => b[1] - a[1]);
 
         let descVictims = "**🤪 الأكثر تكليجاً (الضحايا):**\n";
-        sortedVictims.forEach(([user, count], index) => {
+        sortedVictims.forEach(([userKey, count], index) => {
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔹';
-            descVictims += `${medal} **#${index + 1}** ${victimNames[user]} (${user}) — **${count}** تكليجة\n`;
+            descVictims += `${medal} **#${index + 1}** ${victimDetails[userKey].displayName} (${userKey}) — **${count}** تكليجة\n`;
         });
 
         let descRecorders = "\n**📸 الأكثر تسجيلاً للتكليجات (الراصدين):**\n";
-        sortedRecorders.forEach(([user, count], index) => {
+        sortedRecorders.forEach(([userKey, count], index) => {
             const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🔹';
-            descRecorders += `${medal} **#${index + 1}** ${recorderNames[user]} (${user}) — **${count}** مسجلة\n`;
+            descRecorders += `${medal} **#${index + 1}** ${recorderDetails[userKey].displayName} (${userKey}) — **${count}** مسجلة\n`;
         });
 
         const payload = {
