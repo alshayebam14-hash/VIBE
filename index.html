@@ -156,7 +156,7 @@
         }
 
         .stat-card .user-handle {
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             color: var(--subtext);
             font-weight: normal;
             direction: ltr;
@@ -345,7 +345,7 @@ unknown = @.rrox
     function getMapFromInput() {
         const text = document.getElementById('mappingText').value;
         const lines = text.split('\n');
-        const nameToUser = {};
+        const mappingList = [];
         const userToName = {};
 
         lines.forEach(line => {
@@ -357,23 +357,29 @@ unknown = @.rrox
                     if (!username.startsWith('@')) username = '@' + username;
                     
                     const cleanDisp = dispName.replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
-                    nameToUser[cleanDisp] = { username: username.toLowerCase(), displayName: dispName };
+                    mappingList.push({
+                        cleanDisp: cleanDisp,
+                        displayName: dispName,
+                        username: username.toLowerCase()
+                    });
                     userToName[username.toLowerCase()] = dispName;
                 }
             }
         });
 
-        return { nameToUser, userToName };
+        // ترتيب حسب الطول لتفادي المطابقات الجزئية الخاطئة
+        mappingList.sort((a, b) => b.cleanDisp.length - a.cleanDisp.length);
+
+        return { mappingList, userToName };
     }
 
     function processText() {
         const text = document.getElementById('rawText').value;
         if (!text.trim()) return;
 
-        const { nameToUser, userToName } = getMapFromInput();
+        const { mappingList, userToName } = getMapFromInput();
         parsedData = [];
 
-        // تقسيم النص حسب سطر مرسل الديسكورد (الذي يحتوي على التاريخ والوقت AM/PM أو —)
         const lines = text.split('\n');
         let currentRecorder = null;
 
@@ -381,32 +387,43 @@ unknown = @.rrox
             const line = lines[i].trim();
             if (!line) continue;
 
-            // كشف سطر الهيدر الخاص باسم المرسل والتاريخ
+            // كشف سطر الهيدر الخاص بالمرسل
             const isHeader = line.includes('—') || /\d{1,2}\/\d{1,2}\/\d{4}/.test(line) || /\d{1,2}:\d{2}\s*(AM|PM)/i.test(line);
 
             if (isHeader) {
-                // استخراج الاسم قبل علامة — أو الفاصلة
                 let rawName = line.split('—')[0].split(',')[0].trim();
-                const cleanRaw = rawName.replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
+                
+                // تنظيف الاسم المستخرج من الديسكورد من الرتب والمخلفات
+                let cleanRaw = rawName.replace(/\[.*?\]/g, '').replace(/^[!@'\s;\-\.\_]+/g, '').trim().toLowerCase();
 
-                if (nameToUser[cleanRaw]) {
-                    currentRecorder = nameToUser[cleanRaw];
-                } else {
+                let matched = false;
+                for (const item of mappingList) {
+                    if (cleanRaw.includes(item.cleanDisp) || item.cleanDisp.includes(cleanRaw)) {
+                        currentRecorder = {
+                            displayName: item.displayName,
+                            username: item.username
+                        };
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (!matched) {
                     currentRecorder = {
-                        displayName: rawName,
+                        displayName: rawName.replace(/\[.*?\]/g, '').trim(),
                         username: '@' + cleanRaw.replace(/\s+/g, '')
                     };
                 }
                 continue;
             }
 
-            // فحص سطر التكليجة (كلمة = كلمة)
+            // فحص سطر التكليجة
             if (line.includes('=')) {
                 const match = line.match(/([^\s=]+\s*=\s*[^\s@]+)/);
                 if (match) {
                     const cleanContent = match[1].trim();
 
-                    // البحث عن الضحية (المنشن @) في نفس السطر أو الأسطر المباشرة المجاورة
+                    // استخراج الضحية (@المنشن)
                     let victimUser = null;
                     for (let j = i; j < Math.min(i + 3, lines.length); j++) {
                         const mentionMatch = lines[j].match(/@([a-zA-Z0-9_\.\-]+)/);
@@ -414,7 +431,7 @@ unknown = @.rrox
                             const uName = '@' + mentionMatch[1].trim().toLowerCase();
                             victimUser = {
                                 username: uName,
-                                displayName: userToName[uName] || uName
+                                displayName: userToName[uName] || uName.replace('@', '')
                             };
                             break;
                         }
@@ -443,18 +460,16 @@ unknown = @.rrox
         const recorderDetails = {};
 
         parsedData.forEach(item => {
-            // تجميع الضحايا
             const vKey = item.victim.username;
             victimCounts[vKey] = (victimCounts[vKey] || 0) + 1;
             victimDetails[vKey] = item.victim;
 
-            // تجميع الراصدين
             const rKey = item.recorder.username;
             recorderCounts[rKey] = (recorderCounts[rKey] || 0) + 1;
             recorderDetails[rKey] = item.recorder;
         });
 
-        // عرض جدول الضحايا
+        // عرض الضحايا
         const sortedVictims = Object.entries(victimCounts).sort((a, b) => b[1] - a[1]);
         const victimEl = document.getElementById('leaderboardVictims');
         if (sortedVictims.length === 0) {
@@ -466,7 +481,7 @@ unknown = @.rrox
                         <span class="rank">#${index + 1}</span>
                         <div class="user">
                             <span>${victimDetails[userKey].displayName}</span>
-                            <span class="user-handle">(${victimDetails[userKey].username})</span>
+                            <span class="user-handle">${victimDetails[userKey].username}</span>
                         </div>
                     </div>
                     <span class="count">${count} تكليجة</span>
@@ -474,7 +489,7 @@ unknown = @.rrox
             `).join('');
         }
 
-        // عرض جدول الراصدين
+        // عرض الراصدين
         const sortedRecorders = Object.entries(recorderCounts).sort((a, b) => b[1] - a[1]);
         const recorderEl = document.getElementById('leaderboardRecorders');
         if (sortedRecorders.length === 0) {
@@ -486,7 +501,7 @@ unknown = @.rrox
                         <span class="rank">#${index + 1}</span>
                         <div class="user">
                             <span>${recorderDetails[userKey].displayName}</span>
-                            <span class="user-handle">(${recorderDetails[userKey].username})</span>
+                            <span class="user-handle">${recorderDetails[userKey].username}</span>
                         </div>
                     </div>
                     <span class="count">${count} تسجيل</span>
